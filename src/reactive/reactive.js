@@ -1,42 +1,56 @@
-import { isObject } from "../utils";
+
+import{ hasChanged, isObject,isArray } from '../utils'
 import { track, trigger } from './effect';
-const propMap = new WeakMap();
+
+const proxyMap = new WeakMap();
 
 export function reactive(target) {
-    
-    if (!isObject(target)) {
+    //判断是否为对象
+    if(!isObject(target)){
         return target;
     }
+    
+    //判断是否已经代理过
     if(isReactive(target)){
         return target;
     }
     
+    //判断是否代理同一个对象
+    //  let a = reactive(obj) , b = reactive(obj)
+    if(proxyMap.has(target)){
+        return proxyMap.get(target);
+    }
+
     const proxy = new Proxy(target, {
-        get(target, name, receiver) {
-            if(name === '__isReactive'){
+        //
+        get(target,key,receiver){
+            if(key === '__isReactive'){
                 return true;
             }
-            //Reflect 参考阮一峰老师的书
-            //Reflect.get(target,name,receiver)查找并返回target对象的name属性
-            //如果没有该属性则返回undefined
-            const result = Reflect.get(target, name, receiver);
-            track(target,name);
-            return result;
+            const result = Reflect.get(target, key, receiver);
+            track(target, key); //依赖收集
+            return isObject(result) ? reactive(result) : result; //解决特例深层代理
         },
-
-        set(target,name,value,receiver) {
-            const result = Reflect.set(target, name, value, receiver);
-            trigger(target,name);
+        
+        set(target,key,value,receiver){
+            let oldLength = target.length; //解决数组特例,
+            const oldValue = target[key];
+            const result = Reflect.set(target,key,value,receiver);
+            //判断依赖对象是否有改变
+            if(hasChanged(oldValue,value)){
+                trigger(target,key);
+                //解决数组特例
+                if(isArray(target) && hasChanged(oldLength,target.length)){
+                    trigger(target,'length');
+                }
+            }
             return result;
         }
-    })
-    
-    propMap.set(target, proxy);
-    
+    });
+
+    proxyMap.set (target,proxy);
     return proxy;
-
 }
-
 
 //判断一个对象是否被代理过
 export function isReactive(target){
@@ -44,49 +58,10 @@ export function isReactive(target){
 }
 
 
-// const proxyMap = new WeakMap();
-
-// export function reactive(target) {
-//     //判断是否是对象
-//     if (!isObject(target)) {
-//         return target;
-//     }
-
-//     //判断是否代理过
-//     if (!isReactive(target)) {
-//         return target;
-//     }
-
-//     //是否代理同一个对象
-//     if (proxyMap.has(target)) {
-//         return proxyMap.get(target);
-//     }
-    
-//     const proxy = new Proxy(target, {
-//         //重写get方法
-//         get(target, key, receiver) {
-//             if (key === '__isReactive') {
-//                 return true;
-//             }
-//             const result = Reflect.get(target, key, receiver);
-//             //进行依赖收集
-//             return isObject(result) ? reactive(result) : result;
-//         },
-
-//         //重写set方法
-//         set(target, key, value, receiver) {
-//             const oldValue = target[key];
-//             const result = Reflect.set(target, key, value, receiver);
-//             if (hasChanged(old, value)) {
-//                 //触发
-//             }
-
-//             return result;
-//         }
-
-
-     
-//     });
-//     proxyMap.set(target, proxy);
-//     return proxy;
-// }
+//特殊处理
+//reactive(reactive(obj))
+//let a = reactive(obj), b = reactive(obj)
+//hasChanged
+//深层对象代理
+//数组
+//嵌套effect
