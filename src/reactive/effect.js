@@ -3,7 +3,7 @@ let activeEffect = undefined; //让effectFn和track联系起来
 export function effect(fn) {
     const effectFn = () => {
         try {
-            //当前再执行的副作用函数
+            //当前在执行的副作用函数
             activeEffect = effectFn;
             return fn();
         } finally {
